@@ -1,13 +1,17 @@
 
 # Override these values with a local config defined in VD_CONF
 conf = {
-    'ip_prefix' => '192.168.27',
-    'mac_prefix' => '080027027',
-    'box_name' => 'precise',
-    'box_url' => 'http://c479942.r42.cf2.rackcdn.com/precise64.box',
+    'ip_prefix' => '192.168.2',
+    'devstack_branch' => "master",
+    'ip_suffix' => 100,
+    'mac_prefix' => '080027002',
+    'box_name' => 'precise64',
+    'box_url' => 'http://files.vagrantup.com/precise32.box',
     'allocate_memory' => 1024,
     'cache_dir' => 'cache/',
     'ssh_dir' => '~/.ssh/',
+    'devstack_floating_range' => '128/28',
+    'devstack_cookbooks_dir' => 'cookbooks',
 }
 
 
@@ -26,17 +30,19 @@ else
 end
 
 Vagrant::Config.run do |config|
-
   config.vm.box = conf['box_name']
   config.vm.box_url = conf['box_url']
 
   memory = conf['allocate_memory'].to_s()
   config.vm.customize ["modifyvm", :id, "--memory", memory]
+  devstackbranch = conf['devstack_branch'] 
+  config.vm.host_name = devstackbranch.split('/').last
 
-  suffix = "100"
+  suffix = conf['ip_suffix']
 
   ip_prefix = conf['ip_prefix']
   ip = "#{ip_prefix}.#{suffix}"
+  range = conf['devstack_floating_range']
 
   mac_prefix = conf['mac_prefix']
   mac = "#{mac_prefix}#{suffix}"
@@ -52,9 +58,12 @@ Vagrant::Config.run do |config|
   ssh_dir = conf['ssh_dir']
   config.vm.share_folder("v-ssh", "/home/vagrant/.host-ssh", ssh_dir)
 
+  port_fwd = (8000 + suffix)
+  config.vm.forward_port 80, port_fwd 
+
   cookbooks_dir = conf['devstack_cookbooks_dir']
   config.vm.provision :chef_solo do |chef|
-    chef.cookbooks_path = ["cookbooks"]
+    chef.cookbooks_path = cookbooks_dir
     chef.log_level = :debug
     chef.run_list = [
       "recipe[vagrant-openstack::hostname]",
@@ -69,7 +78,9 @@ Vagrant::Config.run do |config|
       :devstack => {
           :flat_interface => "eth1",
           :public_interface => "eth1",
-          :floating_range => "#{ip_prefix}.128/28",
+          :floating_range => "#{ip_prefix}.#{range}",
+          :instances_path => "/home/vagrant/instances", # Quick workaround, for stack.sh cleanup for instances causing deletion of /home/vagrant/ in the midddle of the install
+          :branch => devstackbranch,
           :host_ip => ip,
           :localrc => localrc
       },
